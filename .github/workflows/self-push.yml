@@ -73,7 +73,7 @@ jobs:
           echo "::set-output name=test_map::$test_map"
 
   run_tests_single_gpu:
-    name: Model tests
+    name: 🤖 Model tests
     needs: setup
     # `dummy` means there is no test to run
     if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
