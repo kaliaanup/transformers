@@ -1,4 +1,4 @@
-name: zzzzzzzzzzzzzzzzzzz
+name: Self-hosted runner (push)
 
 on:
   push:
@@ -25,7 +25,7 @@ env:
 
 jobs:
   setup:
-    name: 🤖 Setup
+    name: Setup
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
@@ -61,7 +61,7 @@ jobs:
         # If no test to run (so no `test_map.json` file), create a dummy map (empty matrix will fail)
         run: |
           if [ -f test_map.json ]; then
-              keys=$(python3 -c 'import json; fp = open("test_map.json"); test_map = json.load(fp); fp.close(); d = list(test_map.keys())[:3]; print(d)')
+              keys=$(python3 -c 'import json; fp = open("test_map.json"); test_map = json.load(fp); fp.close(); d = list(test_map.keys()); print(d)')
               test_map=$(python3 -c 'import json; fp = open("test_map.json"); test_map = json.load(fp); fp.close(); print(test_map)')
           else
               keys=$(python3 -c 'keys = ["dummy"]; print(keys)')
@@ -71,60 +71,3 @@ jobs:
           echo $test_map
           echo "::set-output name=matrix::$keys"
           echo "::set-output name=test_map::$test_map"
-
-  run_tests_single_gpu:
-    name: 🤖 Model tests
-    needs: setup
-    # `dummy` means there is no test to run
-    if: contains(fromJson(needs.setup.outputs.matrix), 'dummy') != true
-    strategy:
-      fail-fast: false
-      matrix:
-        folders: ${{ fromJson(needs.setup.outputs.matrix) }}
-        machine_type: [single-gpu]
-    runs-on: [self-hosted, docker-gpu, '${{ matrix.machine_type }}']
-    container:
-      image: huggingface/transformers-all-latest-gpu
-      options: --gpus 0 --shm-size "16gb" --ipc host -v /mnt/cache/.cache/huggingface:/mnt/cache/
-    steps:
-      - name: Echo folder ${{ matrix.folders }}
-        shell: bash
-        # For folders like `models/bert`, set an env. var. (`matrix_folders`) to `models_bert`, which will be used to
-        # set the artifact folder names (because the character `/` is not allowed).
-        run: |
-          echo "${{ matrix.folders }}"
-          echo "${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}"
-          matrix_folders=${{ matrix.folders }}
-          matrix_folders=${matrix_folders/'models/'/'models_'}
-          echo "$matrix_folders"
-          echo "matrix_folders=$matrix_folders" >> $GITHUB_ENV
-
-      - name: Update clone
-        working-directory: /transformers
-        run: git fetch && git checkout ${{ github.sha }}
-
-      - name: NVIDIA-SMI
-        run: |
-          nvidia-smi
-
-      - name: Environment
-        working-directory: /transformers
-        run: |
-          python3 utils/print_env.py
-
-      - name: Run all non-slow selected tests on GPU
-        working-directory: /transformers
-        run: |
-          python3 -m pytest -n 2 --dist=loadfile -v --make-reports=${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }} ${{ fromJson(needs.setup.outputs.test_map)[matrix.folders] }}
-
-      - name: Failure short reports
-        if: ${{ failure() }}
-        continue-on-error: true
-        run: cat /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}/failures_short.txt
-
-      - name: Test suite reports artifacts
-        if: ${{ always() }}
-        uses: actions/upload-artifact@v2
-        with:
-          name: ${{ matrix.machine_type }}_run_all_tests_gpu_${{ env.matrix_folders }}_test_reports
-          path: /transformers/reports/${{ matrix.machine_type }}_tests_gpu_${{ matrix.folders }}
