@@ -25,7 +25,7 @@ env:
 
 jobs:
   setup:
-    name: Setup
+    name: 🤖 Setup
     runs-on: ubuntu-latest
     outputs:
       matrix: ${{ steps.set-matrix.outputs.matrix }}
